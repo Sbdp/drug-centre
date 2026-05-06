@@ -1,0 +1,137 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drug Centre</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .low-stock { color: red; font-weight: bold; }
+        /* Styling for the collapsible headers */
+        details { border: 1px solid #ddd; margin-bottom: 10px; border-radius: 4px; }
+        summary { 
+            padding: 10px; background-color: #f8f9fa; cursor: pointer; font-weight: bold; 
+            list-style: none; /* Removes default arrow if desired */
+        }
+        summary:hover { background-color: #e2e6ea; }
+        .wanting-category-table { width: 100%; border-top: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Drug Centre</h1>
+    
+    <h2>Full Stock List</h2>
+    <table id="stock-table">
+        <thead><tr><th>Medicine</th><th>Current Stock</th><th>Threshold</th><th>Category</th></tr></thead>
+        <tbody></tbody>
+    </table>
+
+    <h2>Wanting List (Restock Needed)</h2>
+
+    <div style="margin-bottom: 10px;">
+        <button onclick="toggleAll(true)">Expand All</button>
+        <button onclick="toggleAll(false)">Collapse All</button>
+    </div>
+    <div id="wanting-container">
+        <!-- Collapsible categories will be injected here -->
+         <table id="wanting-table">
+            <thead><tr><th>Medicine</th><th>Current Stock</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadData(url, tableId) {
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (!data.length) {
+                tbody.innerHTML = `<tr><td colspan="4">No data available</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                // Full Stock Table Logic
+                if (tableId === 'stock-table') {
+                    const isLow = item.current_stock < item.required_stock;
+                    return `
+                        <tr>
+                            <td>${item.name}</td>
+                            <td class="${isLow ? 'low-stock' : ''}">${item.current_stock}</td>
+                            <td>${item.required_stock}</td>
+                            <td>${item.category}</td>
+                        </tr>`;
+                } 
+                // Wanting List Table Logic
+                else {
+                    return `
+                        <tr>
+                            <td>${item.name}</td>
+                            <td class="low-stock">${item.current_stock}</td>
+                        </tr>`;
+                }
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="4">Error: ${err.message}</td></tr>`;
+        }
+    }
+
+        async function loadWantingList(url) {
+            const container = document.getElementById('wanting-container');
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data.length) {
+                    container.innerHTML = `<p>No restock needed.</p>`;
+                    return;
+                }
+
+                // 1. Group data by Category
+                const groups = data.reduce((acc, item) => {
+                    if (!acc[item.category]) acc[item.category] = [];
+                    acc[item.category].push(item);
+                    return acc;
+                }, {});
+
+                // 2. Generate HTML for each category
+                container.innerHTML = Object.keys(groups).map(category => `
+                    <details>
+                        <summary>📁 ${category} (${groups[category].length} items)</summary>
+                        <table class="wanting-category-table">
+                            <thead>
+                                <tr><th>Medicine</th><th>Current Stock</th></tr>
+                            </thead>
+                            <tbody>
+                                ${groups[category].map(item => `
+                                    <tr>
+                                        <td>${item.name}</td>
+                                        <td class="low-stock">${item.current_stock}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </details>
+                `).join('');
+
+            } catch (err) {
+                container.innerHTML = `<p style="color:red">Error: ${err.message}</p>`;
+            }
+        }
+
+        function toggleAll(isOpen) {
+            const details = document.querySelectorAll('#wanting-container details');
+            details.forEach(el => {
+                el.open = isOpen;
+            });
+        }
+
+        loadData('http://localhost:3000/api/stock', 'stock-table');
+        loadWantingList('http://localhost:3000/api/wanting-list', 'wanting-table');
+    </script>
+</body>
+</html>

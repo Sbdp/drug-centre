@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drug Centre Kolkata - Inventory Management</title>
+    <style>
+        :root {
+            --primary-blue: #004a99;
+            --sidebar-dark: #2c3e50;
+            --accent-green: #27ae60;
+            --bg-light: #f4f7f6;
+            --text-dark: #333;
+            --danger-red: #d9534f;
+        }
+
+        * { box-sizing: border-box; }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            display: flex; 
+            background: var(--bg-light); 
+            height: 100vh; 
+            color: var(--text-dark);
+        }
+
+        /* Sidebar Navigation */
+        #sidebar { 
+            width: 260px; 
+            background: var(--sidebar-dark); 
+            color: white; 
+            display: flex; 
+            flex-direction: column; 
+            flex-shrink: 0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-header { 
+            padding: 25px 20px; 
+            background: rgba(0,0,0,0.2); 
+            font-weight: bold; 
+            font-size: 1.3rem; 
+            border-bottom: 1px solid #3e4f5f;
+            text-align: center;
+        }
+
+        .nav-item { 
+            padding: 15px 25px; 
+            cursor: pointer; 
+            border-left: 5px solid transparent; 
+            transition: all 0.3s; 
+            display: flex; 
+            align-items: center;
+            font-size: 1rem;
+        }
+
+        .nav-item:hover { background: #34495e; border-left-color: var(--accent-green); }
+        .nav-item.active { background: #1a252f; border-left-color: var(--accent-green); font-weight: bold; }
+
+        /* Main Area */
+        #main-content { flex: 1; padding: 40px; overflow-y: auto; }
+        .page-section { display: none; animation: fadeIn 0.3s ease-in; }
+        .page-section.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        h1 { color: var(--primary-blue); margin-bottom: 25px; font-weight: 300; }
+
+        /* Tables & UI Components */
+        .card { 
+            background: white; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
+            overflow: hidden; 
+            margin-bottom: 20px;
+        }
+
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: var(--primary-blue); color: white; padding: 15px; font-weight: 500; }
+        td { padding: 12px 15px; border-bottom: 1px solid #eee; }
+        tr:hover { background-color: #f9f9f9; }
+
+        .low-stock { color: var(--danger-red); font-weight: bold; }
+
+        .btn { 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin-right: 10px; 
+            font-weight: 600; 
+            transition: 0.2s;
+        }
+        .btn-primary { background: var(--primary-blue); color: white; }
+        .btn-primary:hover { background: #003366; }
+        .btn-outline { border: 1px solid #ddd; background: white; color: #666; }
+        .btn-outline:hover { background: #f0f0f0; }
+
+        /* Collapsible Elements */
+        details { margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+        summary { 
+            padding: 15px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            color: var(--primary-blue); 
+            background: #fff;
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary:after { content: '▼'; font-size: 0.8rem; opacity: 0.5; }
+        details[open] summary:after { content: '▲'; }
+        
+        /* Form Styling */
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; }
+        .form-group input, .form-group select { 
+            width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar Navigation -->
+<nav id="sidebar">
+    <div class="sidebar-header">Drug Centre Kolkata</div>
+    <div class="nav-item active" onclick="showPage(event, 'home')">📊 Stock Overview</div>
+    <div class="nav-item" onclick="showPage(event, 'add-medicine')">➕ Add Medicine</div>
+    <div class="nav-item" onclick="showPage(event, 'wanting-list')">📋 Wanting List</div>
+    <div class="nav-item" onclick="showPage(event, 'sales-section')">💸 Record Sale</div>
+</nav>
+
+<!-- Main Content Area -->
+<main id="main-content">
+    
+    <!-- 1. Home / Full Stock -->
+    <section id="home" class="page-section active">
+        <h1>Inventory Overview</h1>
+        
+        <!-- Search & Export Controls -->
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="stockSearch" placeholder="🔍 Search medicine by name..." onkeyup="filterTable('stock-table', this.value)" style="flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
+            <button class="btn btn-outline" onclick="downloadCSV('stock-table', 'Full_Inventory')">📥 Export CSV</button>
+        </div>
+
+        <div class="card">
+            <table id="stock-table">
+                <thead>
+                    <tr>
+                        <th>Medicine Name</th>
+                        <th>Stock Level</th>
+                        <th>Reorder Point</th>
+                        <th>Category</th>
+                    </tr>
+                </thead>
+                <tbody><!-- Data injected here --></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 2. Add Medicine -->
+    <section id="add-medicine" class="page-section">
+        <h1>Add New Inventory</h1>
+        <div class="card" style="max-width: 500px; padding: 30px;">
+            <form id="medicineForm">
+                <div class="form-group">
+                    <label>Medicine Name</label>
+                    <input type="text" id="medName" placeholder="e.g. Paracetamol 500mg" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Category</label>
+                    <div id="category-selector-container">
+                        <select id="medCategory" onchange="handleCategoryChange(this)">
+                            <!-- Options injected by JS -->
+                        </select>
+                        <div id="new-category-wrapper" style="display: none; display: flex; gap: 5px; margin-top: 5px;">
+                            <input type="text" id="newCategoryInput" placeholder="Type new category name..." style="flex: 1;">
+                            <button type="button" class="btn btn-outline" onclick="cancelNewCategory()" title="Back to list">✖</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Price (₹)</label>
+                    <input type="number" step="0.01" id="medPrice" placeholder="0.00" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Initial Stock Count</label>
+                    <input type="number" id="medStock" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Minimum Threshold</label>
+                    <input type="number" id="medThreshold" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Save to Database</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- 3. Wanting List -->
+    <section id="wanting-list" class="page-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h1>Wanting List (Restock Needed)</h1>
+            <div>
+                <button class="btn btn-outline" onclick="toggleAll(true)">Expand All</button>
+                <button class="btn btn-outline" onclick="toggleAll(false)">Collapse All</button>
+                <button class="btn btn-primary" onclick="downloadCSVFromWanting('Restock_Order')">📥 Download Order</button>
+            </div>
+        </div>
+
+        <!-- Search Bar for Wanting List -->
+        <div style="margin-bottom: 15px;">
+            <input type="text" id="wantingSearch" placeholder="🔍 Filter restock list..." onkeyup="filterWantingList(this.value)" style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
+        </div>
+
+        <div id="wanting-container">
+            <!-- Grouped collapsible tables injected here -->
+        </div>
+    </section>
+
+    <!-- 4. Sales Section -->
+    <section id="sales-section" class="page-section">
+        <h1>Record New Sale</h1>
+        <div class="card" style="max-width: 500px; padding: 30px;">
+            <form id="salesForm">
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="salesCategory" onchange="updateProductList(this.value)" required>
+                        <option value="">-- Select Category --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Medicine Name</label>
+                    <select id="salesProduct" required disabled>
+                        <option value="">-- Select Product --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quantity Sold</label>
+                    <input type="number" id="salesQty" min="1" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="background: var(--accent-green);">Confirm Sale</button>
+            </form>
+        </div>
+    </section>
+
+</main>
+
+    <script>
+
+        let allMedicines = [];
+        function handleCategoryChange(select) {
+            const wrapper = document.getElementById('new-category-wrapper');
+            const dropdown = document.getElementById('medCategory');
+            
+            if (select.value === 'New Category') {
+                dropdown.style.display = 'none'; // Hide dropdown
+                wrapper.style.display = 'flex';  // Show text input
+                document.getElementById('newCategoryInput').focus();
+            }
+        }
+
+        function cancelNewCategory() {
+            const wrapper = document.getElementById('new-category-wrapper');
+            const dropdown = document.getElementById('medCategory');
+            const input = document.getElementById('newCategoryInput');
+            
+            wrapper.style.display = 'none';   // Hide text input
+            dropdown.style.display = 'block'; // Show dropdown
+            dropdown.value = "";              // Reset selection
+            input.value = "";                 // Clear text
+        }
+
+        async function populateCategories() {
+            const select = document.getElementById('medCategory');
+            try {
+                const response = await fetch(`${API_BASE}/stock`);
+                const data = await response.json();
+
+                // Get unique categories, filter out null/undefined, and sort alphabetically
+                const uniqueCategories = [...new Set(data.map(item => item.category))]
+                    .filter(cat => cat) 
+                    .sort();
+
+                // Map them to HTML Option elements
+                select.innerHTML = uniqueCategories.map(cat => 
+                    `<option value="${cat}">${cat}</option>`
+                ).join('') + `<option value="New Category">+ Add New Category</option>`;
+                
+            } catch (err) {
+                console.error("Could not load categories:", err);
+            }
+        }
+        // --- Page Navigation Logic ---
+        function showPage(event, pageId) {
+            // Hide all sections
+            document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+            // Remove active state from menu
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+            // Show selected page
+            document.getElementById(pageId).classList.add('active');
+            // Set menu item active
+            event.currentTarget.classList.add('active');
+
+            // Refresh data based on page
+            if (pageId === 'home') loadFullStock();
+            if (pageId === 'wanting-list') loadWantingList();
+            if (pageId === 'add-medicine') populateCategories(); // <--- Add this line
+            if (pageId === 'sales-section') prepareSalesPage();
+
+
+        }
+
+        // --- Data Fetching Logic ---
+        const API_BASE = 'http://localhost:3000/api';
+
+        async function loadFullStock() {
+            const tbody = document.querySelector('#stock-table tbody');
+            try {
+                const response = await fetch(`${API_BASE}/stock`);
+                const data = await response.json();
+                
+                tbody.innerHTML = data.length ? data.map(item => `
+                    <tr>
+                        <td>${item.name}</td>
+                        <td class="${item.current_stock < item.required_stock ? 'low-stock' : ''}">
+                            ${item.current_stock}
+                        </td>
+                        <td>${item.required_stock}</td>
+                        <td>${item.category || 'General'}</td>
+                    </tr>
+                `).join('') : '<tr><td colspan="4">No inventory data found.</td></tr>';
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="4" style="color:red">Connection Error: Ensure your local server is running.</td></tr>`;
+            }
+        }
+
+        async function loadWantingList() {
+            const container = document.getElementById('wanting-container');
+            try {
+                const response = await fetch(`${API_BASE}/wanting-list`);
+                const data = await response.json();
+
+                if (!data.length) {
+                    container.innerHTML = '<div class="card" style="padding:20px; text-align:center">✅ All stock levels are sufficient.</div>';
+                    return;
+                }
+
+                // Group items by category to handle the "undefined" bug
+                const groups = data.reduce((acc, item) => {
+                    const cat = item.category || 'Uncategorized';
+                    if (!acc[cat]) acc[cat] = [];
+                    acc[cat].push(item);
+                    return acc;
+                }, {});
+
+                container.innerHTML = Object.keys(groups).map(category => `
+                    <details open>
+                        <summary>📁 ${category} (${groups[category].length} items)</summary>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Medicine Name</th>
+                                    <th>Current Stock</th>
+                                    <th>Required</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${groups[category].map(item => `
+                                    <tr>
+                                        <td>${item.name}</td>
+                                        <td class="low-stock">${item.current_stock}</td>
+                                        <td>${item.required_stock}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </details>
+                `).join('');
+
+            } catch (err) {
+                container.innerHTML = `<p style="color:red">Failed to load wanting list.</p>`;
+            }
+        }
+
+        // --- Helper Functions ---
+        function toggleAll(isOpen) {
+            document.querySelectorAll('#wanting-container details').forEach(el => el.open = isOpen);
+        }
+
+        
+    // Fetch categories and products when Sales page opens
+    async function prepareSalesPage() {
+        const response = await fetch(`${API_BASE}/stock`);
+        allMedicines = await response.json();
+
+        const categorySelect = document.getElementById('salesCategory');
+        const uniqueCats = [...new Set(allMedicines.map(m => m.category))].sort();
+        
+        categorySelect.innerHTML = '<option value="">-- Select Category --</option>' + 
+            uniqueCats.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+    }
+
+    // --- 🔍 Real-time Search Logic ---
+    function filterTable(tableId, query) {
+        const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+        const filter = query.toLowerCase();
+        
+        rows.forEach(row => {
+            const name = row.cells[0].textContent.toLowerCase();
+            row.style.display = name.includes(filter) ? "" : "none";
+        });
+    }
+
+    // Specialized search for the collapsible Wanting List
+    function filterWantingList(query) {
+        const filter = query.toLowerCase();
+        const details = document.querySelectorAll('#wanting-container details');
+        
+        details.forEach(detail => {
+            const rows = detail.querySelectorAll('tbody tr');
+            let hasVisibleRow = false;
+            
+            rows.forEach(row => {
+                const name = row.cells[0].textContent.toLowerCase();
+                const match = name.includes(filter);
+                row.style.display = match ? "" : "none";
+                if (match) hasVisibleRow = true;
+            });
+            
+            // Hide the whole category if no items match
+            detail.style.display = hasVisibleRow ? "" : "none";
+        });
+    }
+
+    // --- 📥 CSV Export Logic ---
+    function downloadCSV(tableId, filename) {
+        const rows = document.querySelectorAll(`#${tableId} tr`);
+        let csv = [];
+        
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td, th');
+            const rowData = Array.from(cols).map(c => `"${c.textContent.trim()}"`).join(',');
+            csv.push(rowData);
+        });
+
+        const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${filename}_${new Date().toLocaleDateString()}.csv`;
+        a.click();
+    }
+
+    // Specialized CSV for grouped Wanting List
+    function downloadCSVFromWanting(filename) {
+        let csv = ["Category,Medicine,Current Stock,Required"];
+        const details = document.querySelectorAll('#wanting-container details');
+        
+        details.forEach(detail => {
+            const category = detail.querySelector('summary').textContent.split('(')[0].replace('📁 ', '').trim();
+            const rows = detail.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const name = row.cells[0].textContent;
+                const current = row.cells[1].textContent;
+                const required = row.cells[2].textContent;
+                csv.push(`"${category}","${name}","${current}","${required}"`);
+            });
+        });
+
+        const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('href', url);
+        a.setAttribute('download', `${filename}.csv`);
+        a.click();
+    }
+
+
+    function updateProductList(category) {
+        const productSelect = document.getElementById('salesProduct');
+        if (!category) {
+            productSelect.disabled = true;
+            return;
+        }
+        
+        const filtered = allMedicines.filter(m => m.category === category);
+        productSelect.innerHTML = '<option value="">-- Select Product --</option>' + 
+            filtered.map(m => `<option value="${m.id}">${m.name} (Stock: ${m.current_stock})</option>`).join('');
+        productSelect.disabled = false;
+    }
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', loadFullStock);
+
+        // Simple Form Handler (Simulated)
+        // --- Updated Form Submission Logic ---
+        document.getElementById('medicineForm').onsubmit = async (e) => {
+            e.preventDefault();
+
+            // 1. Determine which category value to use
+            const categorySelect = document.getElementById('medCategory');
+            const newCategoryInput = document.getElementById('newCategoryInput');
+            
+            // If dropdown is hidden, user typed a new category
+            const finalCategory = (categorySelect.style.display === 'none') 
+                ? newCategoryInput.value 
+                : categorySelect.value;
+
+            // 2. Build the data object
+            const formData = {
+                name: document.getElementById('medName').value,
+                category: finalCategory,
+                price: parseFloat(document.getElementById('medPrice').value), // Grab the price
+                current_stock: parseInt(document.getElementById('medStock').value),
+                required_stock: parseInt(document.getElementById('medThreshold').value)
+            };
+
+            try {
+                // 3. POST to your backend
+                const response = await fetch(`${API_BASE}/add-medicine`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    alert('✅ Medicine added successfully to Kolkata inventory!');
+                    e.target.reset();           // Clear form
+                    cancelNewCategory();        // Reset UI back to dropdown mode
+                    loadFullStock();            // Refresh the stock table
+                } else {
+                    alert('❌ Failed to save. Check backend connection.');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('❌ Error: Could not connect to the server.');
+            }
+        };
+
+    document.getElementById('salesForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const saleData = {
+            id: document.getElementById('salesProduct').value,
+            qty: parseInt(document.getElementById('salesQty').value)
+        };
+
+        const response = await fetch(`${API_BASE}/record-sale`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(saleData)
+        });
+
+        if (response.ok) {
+            alert('Sale recorded! Inventory updated.');
+            e.target.reset();
+            document.getElementById('salesProduct').disabled = true;
+            loadFullStock(); // Refresh lists
+        } else {
+            const err = await response.json();
+            alert('Error: ' + err.error);
+        }
+    };
+
+
+
+
+    </script>
+</body>
+</html>
