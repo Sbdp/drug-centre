@@ -136,11 +136,19 @@
 <!-- Main Content Area -->
 <main id="main-content">
     
-    <!-- 1. Home / Full Stock -->
+    <!-- 1. Home / Full Stock -->   
     <section id="home" class="page-section active">
         <h1>Inventory Overview</h1>
         
-        <!-- Search & Export Controls -->
+        <!-- Total Available Stock Valuation Display Card Box -->
+        <div class="card" style="display: inline-block; padding: 15px 25px; margin-bottom: 20px; border-left: 5px solid var(--accent-green); background: #ffffff;">
+            <span style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; color: #666; font-weight: bold;">Total Stock Net Worth (MRP)</span>
+            <div style="font-size: 1.8rem; font-weight: bold; color: var(--primary-blue); margin-top: 5px;">
+                ₹<span id="total-stock-worth-value">0.00</span>
+            </div>
+        </div>
+        
+        <!-- Search & Export Controls Controls -->
         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <input type="text" id="stockSearch" placeholder="🔍 Search medicine by name..." onkeyup="filterTable('stock-table', this.value)" style="flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
             <button class="btn btn-outline" onclick="downloadCSV('stock-table', 'Full_Inventory')">📥 Export CSV</button>
@@ -152,6 +160,7 @@
                     <tr>
                         <th>Medicine Name</th>
                         <th>Stock Level</th>
+                        <th>Total Value (MRP)</th>
                         <th>Reorder Point</th>
                         <th>Category</th>
                     </tr>
@@ -185,17 +194,27 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Price (₹)</label>
+                    <label>Price per Strip (₹)</label>
                     <input type="number" step="0.01" id="medPrice" placeholder="0.00" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Initial Stock Count</label>
-                    <input type="number" id="medStock" required>
+                    <label>Tablets per Strip</label>
+                    <input type="number" id="medTabletsPerStrip" value="10" required>
                 </div>
 
                 <div class="form-group">
-                    <label>Minimum Threshold</label>
+                    <label>Initial Full Strips Count</label>
+                    <input type="number" id="medStripsStock" value="0" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Initial Loose Tablets Count</label>
+                    <input type="number" id="medLooseStock" value="0" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Minimum Threshold (Required Strips)</label>
                     <input type="number" id="medThreshold" required>
                 </div>
 
@@ -243,8 +262,8 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Quantity Sold</label>
-                    <input type="number" id="salesQty" min="1" required>
+                    <label>Quantity Sold (Individual Tablets / Pieces)</label>
+                    <input type="number" id="salesQty" min="1" placeholder="e.g. 5 tabs" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="background: var(--accent-green);">Confirm Sale</button>
             </form>
@@ -254,15 +273,16 @@
 </main>
 
     <script>
-
         let allMedicines = [];
+        const API_BASE = 'http://localhost:3000/api';
+        
         function handleCategoryChange(select) {
             const wrapper = document.getElementById('new-category-wrapper');
             const dropdown = document.getElementById('medCategory');
             
             if (select.value === 'New Category') {
-                dropdown.style.display = 'none'; // Hide dropdown
-                wrapper.style.display = 'flex';  // Show text input
+                dropdown.style.display = 'none'; 
+                wrapper.style.display = 'flex';  
                 document.getElementById('newCategoryInput').focus();
             }
         }
@@ -272,10 +292,26 @@
             const dropdown = document.getElementById('medCategory');
             const input = document.getElementById('newCategoryInput');
             
-            wrapper.style.display = 'none';   // Hide text input
-            dropdown.style.display = 'block'; // Show dropdown
-            dropdown.value = "";              // Reset selection
-            input.value = "";                 // Clear text
+            wrapper.style.display = 'none';   
+            dropdown.style.display = 'block'; 
+            dropdown.value = "";              
+            input.value = "";                 
+        }
+
+        // Fetches the dynamic aggregate inventory value from our new API endpoint
+        async function updateStockTotalWorthDisplay() {
+            const worthTextElement = document.getElementById('total-stock-worth-value');
+            if (!worthTextElement) return;
+            try {
+                const response = await fetch(`${API_BASE}/stock-total-value`);
+                const data = await response.json();
+                
+                // Formats the value cleanly to 2 decimal points
+                worthTextElement.textContent = (data.total_value || 0).toFixed(2);
+            } catch (err) {
+                console.error("Could not load aggregate stock net worth:", err);
+                worthTextElement.textContent = "Error Loading";
+            }
         }
 
         async function populateCategories() {
@@ -284,12 +320,10 @@
                 const response = await fetch(`${API_BASE}/stock`);
                 const data = await response.json();
 
-                // Get unique categories, filter out null/undefined, and sort alphabetically
                 const uniqueCategories = [...new Set(data.map(item => item.category))]
                     .filter(cat => cat) 
                     .sort();
 
-                // Map them to HTML Option elements
                 select.innerHTML = uniqueCategories.map(cat => 
                     `<option value="${cat}">${cat}</option>`
                 ).join('') + `<option value="New Category">+ Add New Category</option>`;
@@ -298,31 +332,22 @@
                 console.error("Could not load categories:", err);
             }
         }
-        // --- Page Navigation Logic ---
+
         function showPage(event, pageId) {
-            // Hide all sections
             document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
-            // Remove active state from menu
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
-            // Show selected page
             document.getElementById(pageId).classList.add('active');
-            // Set menu item active
             event.currentTarget.classList.add('active');
 
-            // Refresh data based on page
             if (pageId === 'home') loadFullStock();
             if (pageId === 'wanting-list') loadWantingList();
-            if (pageId === 'add-medicine') populateCategories(); // <--- Add this line
+            if (pageId === 'add-medicine') populateCategories(); 
             if (pageId === 'sales-section') prepareSalesPage();
-
-
         }
 
-        // --- Data Fetching Logic ---
-        const API_BASE = 'http://localhost:3000/api';
-
         async function loadFullStock() {
+            updateStockTotalWorthDisplay();
             const tbody = document.querySelector('#stock-table tbody');
             try {
                 const response = await fetch(`${API_BASE}/stock`);
@@ -332,14 +357,16 @@
                     <tr>
                         <td>${item.name}</td>
                         <td class="${item.current_stock < item.required_stock ? 'low-stock' : ''}">
-                            ${item.current_stock}
+                            ${item.strips_stock} str, ${item.loose_tablets_stock} tabs
+                            <br><small style="color:gray;">(Total: ${item.current_stock} str)</small>
                         </td>
-                        <td>${item.required_stock}</td>
+                        <td>₹${item.total_mrp}</td>
+                        <td>${item.required_stock} str</td>
                         <td>${item.category || 'General'}</td>
                     </tr>
-                `).join('') : '<tr><td colspan="4">No inventory data found.</td></tr>';
+                `).join('') : '<tr><td colspan="5">No inventory data found.</td></tr>';
             } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="4" style="color:red">Connection Error: Ensure your local server is running.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" style="color:red">Connection Error: Ensure your local server is running.</td></tr>`;
             }
         }
 
@@ -354,7 +381,6 @@
                     return;
                 }
 
-                // Group items by category to handle the "undefined" bug
                 const groups = data.reduce((acc, item) => {
                     const cat = item.category || 'Uncategorized';
                     if (!acc[cat]) acc[cat] = [];
@@ -377,8 +403,8 @@
                                 ${groups[category].map(item => `
                                     <tr>
                                         <td>${item.name}</td>
-                                        <td class="low-stock">${item.current_stock}</td>
-                                        <td>${item.required_stock}</td>
+                                        <td class="low-stock">${item.strips_stock} str, ${item.loose_tablets_stock} tabs (${item.current_stock} total)</td>
+                                        <td>${item.required_stock} str</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -391,141 +417,125 @@
             }
         }
 
-        // --- Helper Functions ---
         function toggleAll(isOpen) {
             document.querySelectorAll('#wanting-container details').forEach(el => el.open = isOpen);
         }
 
-        
-    // Fetch categories and products when Sales page opens
-    async function prepareSalesPage() {
-        const response = await fetch(`${API_BASE}/stock`);
-        allMedicines = await response.json();
+        async function prepareSalesPage() {
+            const response = await fetch(`${API_BASE}/stock`);
+            allMedicines = await response.json();
 
-        const categorySelect = document.getElementById('salesCategory');
-        const uniqueCats = [...new Set(allMedicines.map(m => m.category))].sort();
-        
-        categorySelect.innerHTML = '<option value="">-- Select Category --</option>' + 
-            uniqueCats.map(cat => `<option value="${cat}">${cat}</option>`).join('');
-    }
+            const categorySelect = document.getElementById('salesCategory');
+            const uniqueCats = [...new Set(allMedicines.map(m => m.category))].sort();
+            
+            categorySelect.innerHTML = '<option value="">-- Select Category --</option>' + 
+                uniqueCats.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+        }
 
-    // --- 🔍 Real-time Search Logic ---
-    function filterTable(tableId, query) {
-        const rows = document.querySelectorAll(`#${tableId} tbody tr`);
-        const filter = query.toLowerCase();
-        
-        rows.forEach(row => {
-            const name = row.cells[0].textContent.toLowerCase();
-            row.style.display = name.includes(filter) ? "" : "none";
-        });
-    }
-
-    // Specialized search for the collapsible Wanting List
-    function filterWantingList(query) {
-        const filter = query.toLowerCase();
-        const details = document.querySelectorAll('#wanting-container details');
-        
-        details.forEach(detail => {
-            const rows = detail.querySelectorAll('tbody tr');
-            let hasVisibleRow = false;
+        function filterTable(tableId, query) {
+            const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+            const filter = query.toLowerCase();
             
             rows.forEach(row => {
                 const name = row.cells[0].textContent.toLowerCase();
-                const match = name.includes(filter);
-                row.style.display = match ? "" : "none";
-                if (match) hasVisibleRow = true;
+                row.style.display = name.includes(filter) ? "" : "none";
             });
-            
-            // Hide the whole category if no items match
-            detail.style.display = hasVisibleRow ? "" : "none";
-        });
-    }
-
-    // --- 📥 CSV Export Logic ---
-    function downloadCSV(tableId, filename) {
-        const rows = document.querySelectorAll(`#${tableId} tr`);
-        let csv = [];
-        
-        rows.forEach(row => {
-            const cols = row.querySelectorAll('td, th');
-            const rowData = Array.from(cols).map(c => `"${c.textContent.trim()}"`).join(',');
-            csv.push(rowData);
-        });
-
-        const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${filename}_${new Date().toLocaleDateString()}.csv`;
-        a.click();
-    }
-
-    // Specialized CSV for grouped Wanting List
-    function downloadCSVFromWanting(filename) {
-        let csv = ["Category,Medicine,Current Stock,Required"];
-        const details = document.querySelectorAll('#wanting-container details');
-        
-        details.forEach(detail => {
-            const category = detail.querySelector('summary').textContent.split('(')[0].replace('📁 ', '').trim();
-            const rows = detail.querySelectorAll('tbody tr');
-            rows.forEach(row => {
-                const name = row.cells[0].textContent;
-                const current = row.cells[1].textContent;
-                const required = row.cells[2].textContent;
-                csv.push(`"${category}","${name}","${current}","${required}"`);
-            });
-        });
-
-        const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.setAttribute('href', url);
-        a.setAttribute('download', `${filename}.csv`);
-        a.click();
-    }
-
-
-    function updateProductList(category) {
-        const productSelect = document.getElementById('salesProduct');
-        if (!category) {
-            productSelect.disabled = true;
-            return;
         }
-        
-        const filtered = allMedicines.filter(m => m.category === category);
-        productSelect.innerHTML = '<option value="">-- Select Product --</option>' + 
-            filtered.map(m => `<option value="${m.id}">${m.name} (Stock: ${m.current_stock})</option>`).join('');
-        productSelect.disabled = false;
-    }
 
-        // --- Initial Load ---
+        function filterWantingList(query) {
+            const filter = query.toLowerCase();
+            const details = document.querySelectorAll('#wanting-container details');
+            
+            details.forEach(detail => {
+                const rows = detail.querySelectorAll('tbody tr');
+                let hasVisibleRow = false;
+                
+                rows.forEach(row => {
+                    const name = row.cells[0].textContent.toLowerCase();
+                    const match = name.includes(filter);
+                    row.style.display = match ? "" : "none";
+                    if (match) hasVisibleRow = true;
+                });
+                
+                detail.style.display = hasVisibleRow ? "" : "none";
+            });
+        }
+
+        function downloadCSV(tableId, filename) {
+            const rows = document.querySelectorAll(`#${tableId} tr`);
+            let csv = [];
+            
+            rows.forEach(row => {
+                const cols = row.querySelectorAll('td, th');
+                const rowData = Array.from(cols).map(c => `"${c.textContent.trim().replace(/\n/g, ' ')}"`).join(',');
+                csv.push(rowData);
+            });
+
+            const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${filename}_${new Date().toLocaleDateString()}.csv`;
+            a.click();
+        }
+
+        function downloadCSVFromWanting(filename) {
+            let csv = ["Category,Medicine,Current Stock,Required"];
+            const details = document.querySelectorAll('#wanting-container details');
+            
+            details.forEach(detail => {
+                const category = detail.querySelector('summary').textContent.split('(')[0].replace('📁 ', '').trim();
+                const rows = detail.querySelectorAll('tbody tr');
+                rows.forEach(row => {
+                    const name = row.cells[0].textContent;
+                    const current = row.cells[1].textContent.replace(/,/g, '');
+                    const required = row.cells[2].textContent;
+                    csv.push(`"${category}","${name}","${current}","${required}"`);
+                });
+            });
+
+            const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `${filename}.csv`);
+            a.click();
+        }
+
+        function updateProductList(category) {
+            const productSelect = document.getElementById('salesProduct');
+            if (!category) {
+                productSelect.disabled = true;
+                productSelect.innerHTML = '<option value="">-- Select Product --</option>';
+                return;
+            }
+            
+            const filtered = allMedicines.filter(m => m.category === category);
+            productSelect.innerHTML = '<option value="">-- Select Product --</option>' + 
+                filtered.map(m => `<option value="${m.id}">${m.name} (${m.strips_stock} str, ${m.loose_tablets_stock} tabs left)</option>`).join('');
+            productSelect.disabled = false;
+        }
+
         document.addEventListener('DOMContentLoaded', loadFullStock);
 
-        // Simple Form Handler (Simulated)
-        // --- Updated Form Submission Logic ---
         document.getElementById('medicineForm').onsubmit = async (e) => {
             e.preventDefault();
 
-            // 1. Determine which category value to use
             const categorySelect = document.getElementById('medCategory');
             const newCategoryInput = document.getElementById('newCategoryInput');
-            
-            // If dropdown is hidden, user typed a new category
-            const finalCategory = (categorySelect.style.display === 'none') 
-                ? newCategoryInput.value 
-                : categorySelect.value;
+            const finalCategory = (categorySelect.style.display === 'none') ? newCategoryInput.value : categorySelect.value;
 
-            // 2. Build the data object
             const formData = {
                 name: document.getElementById('medName').value,
                 category: finalCategory,
-                price: parseFloat(document.getElementById('medPrice').value), // Grab the price
-                current_stock: parseInt(document.getElementById('medStock').value),
+                price_per_strip: parseFloat(document.getElementById('medPrice').value),
+                tablets_per_strip: parseInt(document.getElementById('medTabletsPerStrip').value),
+                strips_stock: parseInt(document.getElementById('medStripsStock').value),
+                loose_tablets_stock: parseInt(document.getElementById('medLooseStock').value),
                 required_stock: parseInt(document.getElementById('medThreshold').value)
             };
 
             try {
-                // 3. POST to your backend
                 const response = await fetch(`${API_BASE}/add-medicine`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -534,9 +544,9 @@
 
                 if (response.ok) {
                     alert('✅ Medicine added successfully to Kolkata inventory!');
-                    e.target.reset();           // Clear form
-                    cancelNewCategory();        // Reset UI back to dropdown mode
-                    loadFullStock();            // Refresh the stock table
+                    e.target.reset();           
+                    cancelNewCategory();        
+                    loadFullStock();            
                 } else {
                     alert('❌ Failed to save. Check backend connection.');
                 }
@@ -546,33 +556,29 @@
             }
         };
 
-    document.getElementById('salesForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const saleData = {
-            id: document.getElementById('salesProduct').value,
-            qty: parseInt(document.getElementById('salesQty').value)
+        document.getElementById('salesForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const saleData = {
+                id: document.getElementById('salesProduct').value,
+                qty: parseInt(document.getElementById('salesQty').value)
+            };
+
+            const response = await fetch(`${API_BASE}/record-sale`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(saleData)
+            });
+
+            if (response.ok) {
+                alert('Sale recorded! Inventory updated.');
+                e.target.reset();
+                document.getElementById('salesProduct').disabled = true;
+                loadFullStock(); 
+            } else {
+                const err = await response.json();
+                alert('Error: ' + err.error);
+            }
         };
-
-        const response = await fetch(`${API_BASE}/record-sale`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(saleData)
-        });
-
-        if (response.ok) {
-            alert('Sale recorded! Inventory updated.');
-            e.target.reset();
-            document.getElementById('salesProduct').disabled = true;
-            loadFullStock(); // Refresh lists
-        } else {
-            const err = await response.json();
-            alert('Error: ' + err.error);
-        }
-    };
-
-
-
-
     </script>
 </body>
 </html>
