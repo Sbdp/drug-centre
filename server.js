@@ -161,4 +161,105 @@ app.get('/api/stock-total-value', async (req, res) => {
 });
 
 
+// Fetch ALL medicines (no stock filter, no limit) — used for restock dropdowns
+app.get('/api/medicines/all', async (req, res) => {
+    try {
+        const query = `
+            SELECT id, name, category, strips_stock, loose_tablets_stock, tablets_per_strip, required_stock,
+            ROUND(strips_stock + (loose_tablets_stock::NUMERIC / tablets_per_strip), 2) AS current_stock
+            FROM medicines
+            ORDER BY category ASC, name ASC;
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Search all medicines by name (for restock search box)
+app.get('/api/medicines/search', async (req, res) => {
+    const { q } = req.query;
+    try {
+        const query = `
+            SELECT id, name, category, strips_stock, loose_tablets_stock, tablets_per_strip, required_stock,
+            ROUND(strips_stock + (loose_tablets_stock::NUMERIC / tablets_per_strip), 2) AS current_stock
+            FROM medicines
+            WHERE name ILIKE $1
+            ORDER BY name ASC
+            LIMIT 15;
+        `;
+        const result = await pool.query(query, [`%${q || ''}%`]);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Batch restock — adds strips/loose tablets cumulatively for multiple medicines
+app.post('/api/restock', async (req, res) => {
+    const { items } = req.body; // [{ id, strips_to_add, loose_to_add, expiry_date }]
+
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'No restock items provided.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const updated = [];
+
+        for (const item of items) {
+            const { id, strips_to_add, loose_to_add, cost_price, mrp } = item;
+
+            if (!id || strips_to_add < 0 || loose_to_add < 0) {
+                throw new Error(`Invalid restock entry for medicine id ${id}`);
+            }
+
+            // Fetch current stock
+            const current = await client.query(
+                'SELECT strips_stock, loose_tablets_stock, tablets_per_strip FROM medicines WHERE id = $1',
+                [id]
+            );
+            if (current.rowCount === 0) throw new Error(`Medicine id ${id} not found.`);
+
+            const { strips_stock, loose_tablets_stock, tablets_per_strip } = current.rows[0];
+
+            // Combine existing + new, then re-normalize into strips + loose
+            const totalLoose = loose_tablets_stock + (loose_to_add || 0) + ((strips_to_add || 0) * tablets_per_strip);
+            const newStrips = Math.floor(totalLoose / tablets_per_strip);
+            const newLoose = totalLoose % tablets_per_strip;
+
+            // Build dynamic update: always update stock; update MRP only if provided
+            let updateQuery, updateValues;
+            if (mrp !== null && mrp !== undefined) {
+                updateQuery = `
+                    UPDATE medicines 
+                    SET strips_stock = $1, loose_tablets_stock = $2, price_per_strip = $3
+                    WHERE id = $4
+                    RETURNING id, name, strips_stock, loose_tablets_stock, price_per_strip`;
+                updateValues = [newStrips, newLoose, mrp, id];
+            } else {
+                updateQuery = `
+                    UPDATE medicines 
+                    SET strips_stock = $1, loose_tablets_stock = $2
+                    WHERE id = $3
+                    RETURNING id, name, strips_stock, loose_tablets_stock, price_per_strip`;
+                updateValues = [newStrips, newLoose, id];
+            }
+
+            const result = await client.query(updateQuery, updateValues);
+            updated.push({ ...result.rows[0], cost_price: cost_price || null });
+        }
+
+        await client.query('COMMIT');
+        res.json({ message: `${updated.length} item(s) restocked successfully.`, updated });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
 app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
