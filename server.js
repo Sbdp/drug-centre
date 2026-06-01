@@ -166,6 +166,7 @@ app.get('/api/medicines/all', async (req, res) => {
     try {
         const query = `
             SELECT id, name, category, strips_stock, loose_tablets_stock, tablets_per_strip, required_stock,
+            price_per_strip, cost_price_per_strip,
             ROUND(strips_stock + (loose_tablets_stock::NUMERIC / tablets_per_strip), 2) AS current_stock
             FROM medicines
             ORDER BY category ASC, name ASC;
@@ -230,26 +231,29 @@ app.post('/api/restock', async (req, res) => {
             const newStrips = Math.floor(totalLoose / tablets_per_strip);
             const newLoose = totalLoose % tablets_per_strip;
 
-            // Build dynamic update: always update stock; update MRP only if provided
-            let updateQuery, updateValues;
+            // Build dynamic update: always update stock; update price columns only if provided
+            let setClauses = ['strips_stock = $1', 'loose_tablets_stock = $2'];
+            let updateValues = [newStrips, newLoose];
+            let paramIdx = 3;
+
             if (mrp !== null && mrp !== undefined) {
-                updateQuery = `
-                    UPDATE medicines 
-                    SET strips_stock = $1, loose_tablets_stock = $2, price_per_strip = $3
-                    WHERE id = $4
-                    RETURNING id, name, strips_stock, loose_tablets_stock, price_per_strip`;
-                updateValues = [newStrips, newLoose, mrp, id];
-            } else {
-                updateQuery = `
-                    UPDATE medicines 
-                    SET strips_stock = $1, loose_tablets_stock = $2
-                    WHERE id = $3
-                    RETURNING id, name, strips_stock, loose_tablets_stock, price_per_strip`;
-                updateValues = [newStrips, newLoose, id];
+                setClauses.push(`price_per_strip = $${paramIdx++}`);
+                updateValues.push(mrp);
             }
+            if (cost_price !== null && cost_price !== undefined) {
+                setClauses.push(`cost_price_per_strip = $${paramIdx++}`);
+                updateValues.push(cost_price);
+            }
+            updateValues.push(id);
+
+            const updateQuery = `
+                UPDATE medicines 
+                SET ${setClauses.join(', ')}
+                WHERE id = $${paramIdx}
+                RETURNING id, name, strips_stock, loose_tablets_stock, price_per_strip, cost_price_per_strip`;
 
             const result = await client.query(updateQuery, updateValues);
-            updated.push({ ...result.rows[0], cost_price: cost_price || null });
+            updated.push(result.rows[0]);
         }
 
         await client.query('COMMIT');

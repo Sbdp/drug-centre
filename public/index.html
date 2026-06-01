@@ -128,7 +128,7 @@
 <nav id="sidebar">
     <div class="sidebar-header">Drug Centre Kolkata</div>
     <div class="nav-item active" onclick="showPage(event, 'home')">📊 Stock Overview</div>
-    <div class="nav-item" onclick="showPage(event, 'add-medicine')">➕ Add Medicine</div>
+    <div class="nav-item" style="opacity: 0.4; cursor: not-allowed; pointer-events: none;">➕ Add Medicine</div>
     <div class="nav-item" onclick="showPage(event, 'wanting-list')">📋 Wanting List</div>
     <div class="nav-item" onclick="showPage(event, 'restock-section')">📦 Restock Inventory</div>
     <div class="nav-item" onclick="showPage(event, 'sales-section')">💸 Record Sale</div>
@@ -277,8 +277,21 @@
 
         <!-- Category + Medicine dropdowns + purchase inputs -->
         <div class="card" style="padding: 20px; margin-bottom: 20px;">
-            <!-- Row 1: Dropdowns -->
-            <div style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 15px;">
+
+            <!-- Mode toggle -->
+            <div style="display: flex; gap: 0; margin-bottom: 18px; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; width: fit-content;">
+                <button id="modeExisting" onclick="setRestockMode('existing')"
+                    style="padding: 8px 20px; font-size: 0.88rem; font-weight: 600; border: none; cursor: pointer; background: var(--primary-blue); color: white;">
+                    Existing Medicine
+                </button>
+                <button id="modeNew" onclick="setRestockMode('new')"
+                    style="padding: 8px 20px; font-size: 0.88rem; font-weight: 600; border: none; cursor: pointer; background: white; color: #555;">
+                    + New Medicine
+                </button>
+            </div>
+
+            <!-- Row 1: Existing mode — dropdowns -->
+            <div id="restockExistingRow" style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 15px;">
                 <div style="flex: 1;">
                     <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Category</label>
                     <select id="restockCategory" onchange="onRestockCategoryChange(this.value)"
@@ -294,7 +307,30 @@
                     </select>
                 </div>
             </div>
-            <!-- Row 2: Purchase details + Add button -->
+
+            <!-- Row 1: New mode — text inputs -->
+            <div id="restockNewRow" style="display: none; gap: 15px; align-items: flex-end; margin-bottom: 15px;">
+                <div style="flex: 1;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Category</label>
+                    <select id="restockNewCategory"
+                        style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; background: white; color: #333;">
+                        <option value="">-- Select Category --</option>
+                    </select>
+                </div>
+                <div style="flex: 2;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Medicine Name</label>
+                    <input type="text" id="restockNewName" placeholder="Type medicine name"
+                        oninput="onRestockNewNameInput()"
+                        style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; box-sizing: border-box;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Tablets per Strip</label>
+                    <input type="number" id="restockNewTabletsPerStrip" min="1" value="10" placeholder="10"
+                        style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; box-sizing: border-box;">
+                </div>
+            </div>
+
+            <!-- Row 2: Purchase details + Add button (shared by both modes) -->
             <div style="display: flex; gap: 15px; align-items: flex-end;">
                 <div style="flex: 1;">
                     <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Quantity (Strips)</label>
@@ -614,6 +650,42 @@
         // ── RESTOCK MODULE ──────────────────────────────────────────────
         let restockBatch = [];
         let restockAllMedicines = []; // full medicine list cached on tab open
+        let restockMode = 'existing'; // 'existing' | 'new'
+
+        function setRestockMode(mode) {
+            restockMode = mode;
+            const existingRow = document.getElementById('restockExistingRow');
+            const newRow = document.getElementById('restockNewRow');
+            const btnExisting = document.getElementById('modeExisting');
+            const btnNew = document.getElementById('modeNew');
+
+            if (mode === 'existing') {
+                existingRow.style.display = 'flex';
+                newRow.style.display = 'none';
+                btnExisting.style.background = 'var(--primary-blue)';
+                btnExisting.style.color = 'white';
+                btnNew.style.background = 'white';
+                btnNew.style.color = '#555';
+                // Reset add button — re-evaluate based on medicine select
+                const medVal = document.getElementById('restockMedicine').value;
+                document.getElementById('addToRestockBtn').disabled = !medVal;
+            } else {
+                existingRow.style.display = 'none';
+                newRow.style.display = 'flex';
+                btnNew.style.background = 'var(--primary-blue)';
+                btnNew.style.color = 'white';
+                btnExisting.style.background = 'white';
+                btnExisting.style.color = '#555';
+                // Enable add button only if name is filled
+                const name = document.getElementById('restockNewName').value.trim();
+                document.getElementById('addToRestockBtn').disabled = !name;
+            }
+        }
+
+        function onRestockNewNameInput() {
+            const name = document.getElementById('restockNewName').value.trim();
+            document.getElementById('addToRestockBtn').disabled = !name;
+        }
 
         async function loadRestockDropdowns() {
             const catSelect = document.getElementById('restockCategory');
@@ -630,8 +702,10 @@
                 restockAllMedicines = await res.json();
 
                 const uniqueCats = [...new Set(restockAllMedicines.map(m => m.category || 'General'))].sort();
-                catSelect.innerHTML = '<option value="">-- Select Category --</option>' +
+                const catOptions = '<option value="">-- Select Category --</option>' +
                     uniqueCats.map(c => `<option value="${c}">${c}</option>`).join('');
+                catSelect.innerHTML = catOptions;
+                document.getElementById('restockNewCategory').innerHTML = catOptions;
             } catch (e) {
                 catSelect.innerHTML = '<option value="">Error loading categories</option>';
             }
@@ -661,51 +735,87 @@
             document.getElementById('addToRestockBtn').disabled = !value;
             if (value) {
                 const med = restockAllMedicines.find(m => m.id == value);
-                if (med && med.price_per_strip) {
-                    document.getElementById('restockMRP').value = med.price_per_strip;
-                }
+                document.getElementById('restockMRP').value = med && med.price_per_strip ? med.price_per_strip : '';
+                document.getElementById('restockCostPrice').value = med && med.cost_price_per_strip ? med.cost_price_per_strip : '';
             } else {
                 document.getElementById('restockMRP').value = '';
+                document.getElementById('restockCostPrice').value = '';
             }
         }
 
         function addSelectedToRestockBatch() {
-            const medId = parseInt(document.getElementById('restockMedicine').value);
-            if (!medId) return;
+            const qty      = Math.max(0, parseInt(document.getElementById('restockQty').value) || 0);
+            const mrpVal   = parseFloat(document.getElementById('restockMRP').value) || '';
+            const costVal  = parseFloat(document.getElementById('restockCostPrice').value) || '';
 
-            if (restockBatch.some(r => r.id === medId)) return;
+            if (restockMode === 'new') {
+                const name      = document.getElementById('restockNewName').value.trim();
+                const category  = document.getElementById('restockNewCategory').value || 'General';
+                const tps       = Math.max(1, parseInt(document.getElementById('restockNewTabletsPerStrip').value) || 10);
 
-            const med = restockAllMedicines.find(m => m.id === medId);
-            if (!med) return;
+                if (!name) { alert('Please enter a medicine name.'); return; }
 
-            const qty        = Math.max(0, parseInt(document.getElementById('restockQty').value) || 0);
-            const mrpVal     = parseFloat(document.getElementById('restockMRP').value) || med.price_per_strip || '';
-            const costVal    = parseFloat(document.getElementById('restockCostPrice').value) || '';
+                // Check for duplicate name in batch
+                if (restockBatch.some(r => r.name.toLowerCase() === name.toLowerCase())) {
+                    alert(`"${name}" is already in the batch.`); return;
+                }
 
-            restockBatch.push({
-                id: med.id,
-                name: med.name,
-                category: med.category || 'General',
-                current_stock: med.current_stock,
-                strips_stock: med.strips_stock,
-                loose_tablets_stock: med.loose_tablets_stock,
-                tablets_per_strip: med.tablets_per_strip,
-                strips_to_add: qty,
-                loose_to_add: 0,
-                expiry_date: '',
-                cost_price: costVal,
-                mrp: mrpVal
-            });
+                restockBatch.push({
+                    id: null,
+                    isNew: true,
+                    name,
+                    category,
+                    tablets_per_strip: tps,
+                    required_stock: 0,
+                    current_stock: 0,
+                    strips_stock: 0,
+                    loose_tablets_stock: 0,
+                    strips_to_add: qty,
+                    loose_to_add: 0,
+                    expiry_date: '',
+                    cost_price: costVal,
+                    mrp: mrpVal
+                });
 
-            // Reset inputs; keep category selected for quick multi-add
-            const medSelect = document.getElementById('restockMedicine');
-            medSelect.value = '';
+                // Reset new-mode inputs
+                document.getElementById('restockNewName').value = '';
+                document.getElementById('restockNewCategory').value = '';
+                document.getElementById('restockNewTabletsPerStrip').value = '10';
+
+            } else {
+                const medId = parseInt(document.getElementById('restockMedicine').value);
+                if (!medId) return;
+                if (restockBatch.some(r => r.id === medId)) return;
+
+                const med = restockAllMedicines.find(m => m.id === medId);
+                if (!med) return;
+
+                restockBatch.push({
+                    id: med.id,
+                    isNew: false,
+                    name: med.name,
+                    category: med.category || 'General',
+                    current_stock: med.current_stock,
+                    strips_stock: med.strips_stock,
+                    loose_tablets_stock: med.loose_tablets_stock,
+                    tablets_per_strip: med.tablets_per_strip,
+                    strips_to_add: qty,
+                    loose_to_add: 0,
+                    expiry_date: '',
+                    cost_price: costVal || med.cost_price_per_strip || '',
+                    mrp: mrpVal || med.price_per_strip || ''
+                });
+
+                // Reset medicine select; keep category for quick multi-add
+                document.getElementById('restockMedicine').value = '';
+                onRestockCategoryChange(document.getElementById('restockCategory').value);
+            }
+
+            // Reset shared inputs
             document.getElementById('restockQty').value = '0';
             document.getElementById('restockMRP').value = '';
             document.getElementById('restockCostPrice').value = '';
             document.getElementById('addToRestockBtn').disabled = true;
-            // Refresh medicine list to mark newly added item as disabled
-            onRestockCategoryChange(document.getElementById('restockCategory').value);
 
             renderRestockTable();
         }
@@ -735,7 +845,10 @@
                 return `
                 <tr id="restock-row-${idx}">
                     <td>
-                        <div style="font-weight: 600; color: #2c3e50;">${item.name}</div>
+                        <div style="font-weight: 600; color: #2c3e50;">
+                            ${item.name}
+                            ${item.isNew ? `<span style="font-size:0.7rem; background:#27ae60; color:white; border-radius:4px; padding:1px 6px; margin-left:5px; vertical-align:middle;">NEW</span>` : ''}
+                        </div>
                         <div style="font-size: 0.78rem; color: #888;">${item.category}</div>
                     </td>
                     <td style="font-size: 0.88rem; color: #555;">
@@ -851,6 +964,32 @@
             btn.textContent = '⏳ Saving...';
 
             try {
+                // Step 1: Create any new medicines first, get their DB ids back
+                for (const item of restockBatch) {
+                    if (item.isNew) {
+                        const createRes = await fetch(`${API_BASE}/add-medicine`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: item.name,
+                                category: item.category,
+                                required_stock: item.required_stock || 0,
+                                price_per_strip: item.mrp || 0,
+                                tablets_per_strip: item.tablets_per_strip || 10,
+                                strips_stock: 0,
+                                loose_tablets_stock: 0
+                            })
+                        });
+                        if (!createRes.ok) {
+                            const err = await createRes.json();
+                            throw new Error(`Failed to create "${item.name}": ${err.error}`);
+                        }
+                        const created = await createRes.json();
+                        item.id = created.id; // assign real DB id for restock step
+                    }
+                }
+
+                // Step 2: Restock all items (existing + newly created)
                 const payload = {
                     items: restockBatch.map(i => ({
                         id: i.id,
@@ -871,17 +1010,21 @@
                 const data = await res.json();
 
                 if (res.ok) {
-                    showRestockToast(`✅ ${data.message}`);
+                    const newCount = restockBatch.filter(i => i.isNew).length;
+                    const msg = newCount > 0
+                        ? `✅ ${data.message} (${newCount} new medicine(s) added to database)`
+                        : `✅ ${data.message}`;
+                    showRestockToast(msg);
                     restockBatch = [];
                     renderRestockTable();
-                    // Refresh wanting list in background so it's up to date when user switches tabs
+                    loadRestockDropdowns(); // refresh dropdowns to include newly added medicines
                     loadWantingList();
                     loadFullStock();
                 } else {
                     alert('❌ Restock failed: ' + data.error);
                 }
             } catch (err) {
-                alert('❌ Server error: ' + err.message);
+                alert('❌ Error: ' + err.message);
             } finally {
                 btn.disabled = false;
                 btn.textContent = '✅ Submit Restock';
@@ -971,11 +1114,9 @@
                 alert('Error: ' + err.error);
             }
         };
-        document.addEventListener('DOMContentLoaded', () => {
-            loadFullStock(); 
-        });
 
-
+        // Initial load
+        loadFullStock();
     </script>
 </body>
 </html>
