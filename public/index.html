@@ -312,10 +312,16 @@
             <div id="restockNewRow" style="display: none; gap: 15px; align-items: flex-end; margin-bottom: 15px;">
                 <div style="flex: 1;">
                     <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Category</label>
-                    <select id="restockNewCategory"
+                    <select id="restockNewCategory" onchange="onRestockNewCategoryChange(this.value)"
                         style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; background: white; color: #333;">
                         <option value="">-- Select Category --</option>
                     </select>
+                    <div id="restockNewCategoryInputWrapper" style="display: none; margin-top: 8px; display: none; align-items: center; gap: 6px;">
+                        <input type="text" id="restockNewCategoryInput" placeholder="New category name"
+                            style="flex: 1; padding: 8px 10px; border: 1px solid #2b7de9; border-radius: 4px; font-size: 0.95rem; box-sizing: border-box;">
+                        <button onclick="cancelNewRestockCategory()" title="Cancel"
+                            style="background: none; border: none; color: #999; font-size: 1.1rem; cursor: pointer; padding: 4px;">✕</button>
+                    </div>
                 </div>
                 <div style="flex: 2;">
                     <label style="display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.9rem; color: #555;">Medicine Name</label>
@@ -687,6 +693,31 @@
             document.getElementById('addToRestockBtn').disabled = !name;
         }
 
+        function onRestockNewCategoryChange(value) {
+            const wrapper = document.getElementById('restockNewCategoryInputWrapper');
+            if (value === '__new__') {
+                wrapper.style.display = 'flex';
+                document.getElementById('restockNewCategoryInput').focus();
+            } else {
+                wrapper.style.display = 'none';
+                document.getElementById('restockNewCategoryInput').value = '';
+            }
+        }
+
+        function cancelNewRestockCategory() {
+            document.getElementById('restockNewCategory').value = '';
+            document.getElementById('restockNewCategoryInputWrapper').style.display = 'none';
+            document.getElementById('restockNewCategoryInput').value = '';
+        }
+
+        function getRestockNewCategoryValue() {
+            const sel = document.getElementById('restockNewCategory').value;
+            if (sel === '__new__') {
+                return document.getElementById('restockNewCategoryInput').value.trim() || 'General';
+            }
+            return sel || 'General';
+        }
+
         async function loadRestockDropdowns() {
             const catSelect = document.getElementById('restockCategory');
             const medSelect = document.getElementById('restockMedicine');
@@ -703,7 +734,8 @@
 
                 const uniqueCats = [...new Set(restockAllMedicines.map(m => m.category || 'General'))].sort();
                 const catOptions = '<option value="">-- Select Category --</option>' +
-                    uniqueCats.map(c => `<option value="${c}">${c}</option>`).join('');
+                    uniqueCats.map(c => `<option value="${c}">${c}</option>`).join('') +
+                    '<option value="__new__">+ Add New Category</option>';
                 catSelect.innerHTML = catOptions;
                 document.getElementById('restockNewCategory').innerHTML = catOptions;
             } catch (e) {
@@ -750,7 +782,7 @@
 
             if (restockMode === 'new') {
                 const name      = document.getElementById('restockNewName').value.trim();
-                const category  = document.getElementById('restockNewCategory').value || 'General';
+                const category  = getRestockNewCategoryValue();
                 const tps       = Math.max(1, parseInt(document.getElementById('restockNewTabletsPerStrip').value) || 10);
 
                 if (!name) { alert('Please enter a medicine name.'); return; }
@@ -781,6 +813,7 @@
                 document.getElementById('restockNewName').value = '';
                 document.getElementById('restockNewCategory').value = '';
                 document.getElementById('restockNewTabletsPerStrip').value = '10';
+                cancelNewRestockCategory();
 
             } else {
                 const medId = parseInt(document.getElementById('restockMedicine').value);
